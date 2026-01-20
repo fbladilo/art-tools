@@ -308,14 +308,29 @@ class KonfluxClient:
         if self.dry_run:
             self._logger.warning(f"[DRY RUN] Would have created {api_version}/{kind} {namespace}/{name}")
             return resource.ResourceInstance(self.dyn_client, manifest)
-        self._logger.info(f"Creating {api_version}/{kind} {namespace}/{name or '<dynamic>'}...")
-        new = await exectools.to_thread(
-            api.create, namespace=namespace, body=manifest, _request_timeout=self.request_timeout, **kwargs
-        )
-        new = cast(resource.ResourceInstance, new)
-        api_version, kind, name, namespace = self._extract_manifest_metadata(new.to_dict())
-        self._logger.info(f"Created {api_version}/{kind} {namespace}/{name}")
-        return new
+
+        # Retry ResourceQuotas 409s up to 3 times
+        for attempt in range(3):
+            try:
+                self._logger.info(f"Creating {api_version}/{kind} {namespace}/{name or '<dynamic>'}...")
+                new = await exectools.to_thread(
+                    api.create, namespace=namespace, body=manifest, _request_timeout=self.request_timeout, **kwargs
+                )
+                new = cast(resource.ResourceInstance, new)
+                api_version, kind, name, namespace = self._extract_manifest_metadata(new.to_dict())
+                self._logger.info(f"Created {api_version}/{kind} {namespace}/{name}")
+                return new
+            except exceptions.ConflictError as e:
+                if "resourcequotas" in e.summary() and attempt < 2:
+                    # ResourceQuota optimistic locking conflict - retry with backoff
+                    backoff = 2 ** attempt  # 1s, 2s
+                    self._logger.warning(
+                        f"ResourceQuota conflict creating {api_version}/{kind} {namespace}/{name or '<dynamic>'} "
+                        f"(attempt {attempt + 1}/3), retrying in {backoff}s"
+                    )
+                    await asyncio.sleep(backoff)
+                else:
+                    raise
 
     async def _patch(self, manifest: dict):
         """Patch a resource.
