@@ -101,10 +101,15 @@ class ImageMetadata(Metadata):
         self.children = []  # list of ImageMetadata which use this image as a parent.
         self.dependencies: Set[str] = set()
         dependents = self.config.get('dependents', [])
+        if dependents:
+            self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} has dependents: {dependents}")
         for d in dependents:
+            self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} calling late_resolve_image({d}, add=True)")
             dependent = self.runtime.late_resolve_image(d, add=True, required=False)
             if not dependent:
+                self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} could not be loaded (likely disabled)")
                 continue
+            self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} loaded and added to runtime.image_map")
             dependent.dependencies.add(self.distgit_key)
             self.children.append(dependent)
         self.rebase_event = Event()

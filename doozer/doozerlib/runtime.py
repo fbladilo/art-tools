@@ -1091,7 +1091,10 @@ class Runtime(GroupRuntime):
         """
 
         if distgit_name in self.image_map:
+            self._logger.debug(f"[DEBUG_DEPENDENTS] late_resolve_image({distgit_name}, add={add}) -> already in image_map")
             return self.image_map[distgit_name]
+
+        self._logger.info(f"[DEBUG_DEPENDENTS] late_resolve_image({distgit_name}, add={add}, required={required}) -> loading...")
 
         replace_vars = self.get_replace_vars(self.group_config)
         data_obj = self.gitdata.load_data(path='images', key=distgit_name, replace_vars=replace_vars)
@@ -1120,7 +1123,10 @@ class Runtime(GroupRuntime):
 
         meta = ImageMetadata(self, data_obj, self.upstream_commitish_overrides.get(data_obj.key))
         if add:
+            self._logger.info(f"[DEBUG_DEPENDENTS] late_resolve_image -> Adding {distgit_name} to runtime.image_map")
             self.image_map[distgit_name] = meta
+        else:
+            self._logger.debug(f"[DEBUG_DEPENDENTS] late_resolve_image -> {distgit_name} loaded but NOT added to image_map (add=False)")
         self.component_map[meta.get_component_name()] = meta
         return meta
 

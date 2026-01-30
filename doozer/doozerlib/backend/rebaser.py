@@ -2218,6 +2218,12 @@ class KonfluxRebaser:
         if not csv_config:
             return
 
+        # DEBUG: Log what's in runtime.image_map when updating CSV
+        self._logger.info(f"[DEBUG_DEPENDENTS] _update_csv called for {metadata.distgit_key}")
+        self._logger.info(f"[DEBUG_DEPENDENTS] runtime.image_map contains {len(self._runtime.image_map)} images:")
+        for dgk in sorted(self._runtime.image_map.keys()):
+            self._logger.info(f"[DEBUG_DEPENDENTS]   - {dgk}")
+
         csv_file, image_refs = self._get_csv_file_and_refs(metadata, dest_dir, csv_config)
         registry = csv_config['registry'].rstrip("/")
         image_map = csv_config.get('image-map', {})
@@ -2238,10 +2244,16 @@ class KonfluxRebaser:
             if not distgit:
                 raise ValueError('Unable to find {} in image-references data for {}'.format(name, metadata.distgit_key))
 
+            # DEBUG: Log which path we're taking for this image
+            self._logger.info(f"[DEBUG_DEPENDENTS] Processing image reference: name={name}, distgit={distgit}")
+
             meta = self._runtime.image_map.get(distgit, None)
             if meta:  # image is currently be processed
+                self._logger.info(f"[DEBUG_DEPENDENTS]   -> Found {distgit} in image_map, using uuid_tag")
+                self._logger.info(f"[DEBUG_DEPENDENTS]   -> Resulting tag: {meta.image_name_short}:{self.uuid_tag}")
                 image_tag = f"{meta.image_name_short}:{self.uuid_tag}"
             else:
+                self._logger.info(f"[DEBUG_DEPENDENTS]   -> {distgit} NOT in image_map, calling get_latest_build()")
                 meta = self._runtime.late_resolve_image(distgit)
                 assert meta is not None
                 build = await meta.get_latest_build(
@@ -2254,6 +2266,8 @@ class KonfluxRebaser:
                 v = build.version
                 r = build.release
                 image_tag = '{}:{}-{}'.format(meta.image_name_short, v, r)
+                self._logger.info(f"[DEBUG_DEPENDENTS]   -> Latest build: v={v}, r={r}")
+                self._logger.info(f"[DEBUG_DEPENDENTS]   -> Resulting tag: {image_tag}")
 
             if metadata.distgit_key != meta.distgit_key:
                 if metadata.distgit_key not in meta.config.dependents:
