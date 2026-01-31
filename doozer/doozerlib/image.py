@@ -94,6 +94,7 @@ class ImageMetadata(Metadata):
         commitish: Optional[str] = None,
         clone_source: Optional[bool] = False,
         prevent_cloning: Optional[bool] = False,
+        process_dependents: Optional[bool] = True,
     ):
         super(ImageMetadata, self).__init__('image', runtime, data_obj, commitish, prevent_cloning=prevent_cloning)
         self.required = self.config.get('required', False)
@@ -101,17 +102,26 @@ class ImageMetadata(Metadata):
         self.children = []  # list of ImageMetadata which use this image as a parent.
         self.dependencies: Set[str] = set()
         dependents = self.config.get('dependents', [])
-        if dependents:
-            self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} has dependents: {dependents}")
-        for d in dependents:
-            self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} calling late_resolve_image({d}, add=True)")
-            dependent = self.runtime.late_resolve_image(d, add=True, required=False)
-            if not dependent:
-                self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} could not be loaded (likely disabled)")
-                continue
-            self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} loaded and added to runtime.image_map")
-            dependent.dependencies.add(self.distgit_key)
-            self.children.append(dependent)
+
+        # Only process dependents if this image is being added to image_map for building.
+        # When loading an image just to query its latest build (process_dependents=False),
+        # we should not add its dependents to image_map as a side effect.
+        # See: https://issues.redhat.com/browse/ART-XXXX
+        if process_dependents:
+            if dependents:
+                self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} has dependents: {dependents}")
+            for d in dependents:
+                self.logger.info(f"[DEBUG_DEPENDENTS] {self.distgit_key} calling late_resolve_image({d}, add=True)")
+                dependent = self.runtime.late_resolve_image(d, add=True, required=False)
+                if not dependent:
+                    self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} could not be loaded (likely disabled)")
+                    continue
+                self.logger.info(f"[DEBUG_DEPENDENTS]   -> {d} loaded and added to runtime.image_map")
+                dependent.dependencies.add(self.distgit_key)
+                self.children.append(dependent)
+        else:
+            if dependents:
+                self.logger.debug(f"[DEBUG_DEPENDENTS] {self.distgit_key} has dependents {dependents} but skipping processing (process_dependents=False)")
         self.rebase_event = Event()
         """ Event that is set when this image is being rebased. """
         self.rebase_status = False

@@ -1121,7 +1121,10 @@ class Runtime(GroupRuntime):
             self._logger.warning("Image %s will not be loaded because it has mode %s", distgit_name, mode)
             return None
 
-        meta = ImageMetadata(self, data_obj, self.upstream_commitish_overrides.get(data_obj.key))
+        # Only process dependents if this image will be added to image_map.
+        # When add=False, we're just loading the image to query its latest build,
+        # so we should not trigger loading its dependents as a side effect.
+        meta = ImageMetadata(self, data_obj, self.upstream_commitish_overrides.get(data_obj.key), process_dependents=add)
         if add:
             self._logger.info(f"[DEBUG_DEPENDENTS] late_resolve_image -> Adding {distgit_name} to runtime.image_map")
             self.image_map[distgit_name] = meta
