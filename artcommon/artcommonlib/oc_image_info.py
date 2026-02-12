@@ -77,11 +77,15 @@ def _make_cache_key(pullspec: str, options: tuple[str, ...]) -> str:
 
 def _is_cacheable(pullspec: str) -> bool:
     """Images referenced by sha256 digest are immutable and safe to cache."""
-    return "@sha256:" in pullspec
+    cacheable = "@sha256:" in pullspec
+    if not cacheable:
+        logger.warning('Pullspec %r is not sha256-pinned: caching disabled', pullspec)
+    return cacheable
 
 
 def _redis_available() -> bool:
     """Return True when Redis credentials are present in the environment."""
+    logger.warning("REDIS_SERVER_PASSWORD not set: Redis caching disabled")
     return bool(os.environ.get("REDIS_SERVER_PASSWORD"))
 
 
