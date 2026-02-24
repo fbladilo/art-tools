@@ -49,6 +49,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='origin',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with (
             patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag,
@@ -102,6 +106,36 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             # then
             mock_tag.assert_not_called()
 
+    async def test_mirror_coreos_imagestreams_skipped_when_no_images_built(self):
+        """
+        Test that CoreOS mirroring is skipped when no images were successfully built.
+        """
+
+        # given
+        pipeline = KonfluxOkdPipeline(
+            runtime=self.mock_runtime,
+            image_build_strategy='all',
+            image_list=None,
+            assembly='stream',
+            data_path='https://github.com/openshift-eng/ocp-build-data',
+            data_gitref='',
+            version='4.20',
+            ignore_locks=False,
+            plr_template='',
+            lock_identifier='test-lock',
+            build_priority='10',
+            imagestream_namespace='origin',
+        )
+        # No images were built (empty list)
+        pipeline.built_images = []
+
+        with patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag:
+            # when
+            await pipeline.mirror_coreos_imagestreams()
+
+            # then
+            mock_tag.assert_not_called()
+
     async def test_mirror_coreos_imagestreams_dry_run(self):
         """
         Test that CoreOS mirroring is skipped in dry-run mode.
@@ -123,6 +157,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='origin',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag:
             # when
@@ -151,6 +189,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='origin',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with (
             patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag,
@@ -194,6 +236,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='custom-namespace',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with (
             patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag,
@@ -292,6 +338,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='origin',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with (
             patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag,
@@ -333,6 +383,10 @@ class TestKonfluxOkdPipeline(IsolatedAsyncioTestCase):
             build_priority='10',
             imagestream_namespace='origin',
         )
+        # Simulate successful image builds
+        pipeline.built_images = [
+            {'name': 'test-image', 'nvr': 'test-1.0', 'image_pullspec': 'quay.io/test:latest', 'image_tag': 'latest'}
+        ]
 
         with (
             patch.object(pipeline, '_tag_image_to_stream', new_callable=AsyncMock) as mock_tag,
