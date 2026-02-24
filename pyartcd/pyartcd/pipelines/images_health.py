@@ -183,7 +183,7 @@ class ImagesHealthPipeline:
 
         start_date = (datetime.now(timezone.utc) - timedelta(days=DELTA_DAYS)).strftime('%Y-%m-%d')
         end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        art_dash_link = f'{ART_BUILD_HISTORY_URL}/?name=^{concern["image_name"]}$&group={group}&assembly=stream&engine=konflux&dateRange={start_date}+to+{end_date}'
+        art_dash_link = f'{ART_BUILD_HISTORY_URL}/?name=^{concern["image_name"]}$&group={group}&assembly=stream&engine=konflux&dateRange={start_date}+to+{end_date}&outcome=success&outcome=failure'
         logs_link = self.url_text(self.get_logs_url(concern), "logs")
 
         message = f'{self.url_text(art_dash_link, f"{group}")}: '
@@ -225,7 +225,7 @@ class ImagesHealthPipeline:
         group = concern['group']
         start_date = (datetime.now(timezone.utc) - timedelta(days=DELTA_DAYS)).strftime('%Y-%m-%d')
         end_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        return f'{ART_BUILD_HISTORY_URL}/?name=^{image_name}$&group={group}&assembly=stream&engine=konflux&dateRange={start_date}+to+{end_date}'
+        return f'{ART_BUILD_HISTORY_URL}/?name=^{image_name}$&group={group}&assembly=stream&engine=konflux&dateRange={start_date}+to+{end_date}&outcome=success&outcome=failure'
 
     @staticmethod
     def get_component_tag(report):
