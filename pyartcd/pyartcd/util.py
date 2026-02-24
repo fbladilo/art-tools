@@ -5,7 +5,7 @@ import re
 import shutil
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Dict, Iterable, List, Optional, Union, cast
@@ -19,6 +19,7 @@ from artcommonlib.exectools import limit_concurrency
 from artcommonlib.model import Missing, Model
 from artcommonlib.release_util import SoftwareLifecyclePhase, isolate_assembly_in_release
 from doozerlib import util as doozerutil
+from doozerlib.constants import ART_BUILD_HISTORY_URL
 from errata_tool import ErrataConnector
 
 from pyartcd import constants, record
@@ -440,6 +441,46 @@ def default_release_suffix():
     """
 
     return f'{datetime.strftime(datetime.now(tz=timezone.utc), "%Y%m%d%H%M")}.p?'
+
+
+def build_history_link_url(group: str, assembly: str, days: int = 2, job_url: str = '') -> str:
+    """
+    Construct a URL for art-build-history with proper encoding.
+    Shows both successful and failed builds from a specific job.
+
+    Arg(s):
+        group (str): Group name (e.g., 'openshift-4.17' or 'okd-5.0')
+        assembly (str): Assembly name (e.g., 'stream')
+        days (int): Number of days to look back for build history (default: 2)
+        job_url (str): Jenkins BUILD_URL to filter builds (default: '')
+
+    Return Value(s):
+        str: Complete art-build-history URL with all parameters
+    """
+    start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%d')
+    end_date = (datetime.now(timezone.utc)).strftime('%Y-%m-%d')
+
+    # Build URL with parameters in correct order and include empty parameters
+    build_history_url = (
+        f'{ART_BUILD_HISTORY_URL}/?name=&group={group}&assembly={assembly}'
+        f'&outcome=success&outcome=failure&engine=konflux'
+        f'&dateRange={start_date}+to+{end_date}'
+        f'&nvr=&record_id=&image_sha_tag=&source_repo=&commitish='
+    )
+
+    if job_url:
+        # Jenkins BUILD_URL has single-encoded job paths (build%2Fokd).
+        # Art-build-history needs double-encoded paths (build%252Fokd) after URL decoding.
+        # To achieve this:
+        # 1. Replace %2F with %252F to get build%252Fokd
+        # 2. URL-encode the entire string so %252F becomes %25252F in the parameter
+        # 3. When art-build-history decodes, %25252F becomes %252F, giving us build%252Fokd
+        job_url = job_url.replace('%2F', '%252F')
+        # Manually encode to ensure % is encoded as %25
+        encoded_job_url = job_url.replace('%', '%25').replace('/', '%2F').replace(':', '%3A')
+        build_history_url += f'&art-job-url={encoded_job_url}'
+
+    return build_history_url
 
 
 def dockerfile_url_for(url, branch, sub_path) -> str:
