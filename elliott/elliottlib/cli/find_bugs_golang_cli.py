@@ -89,7 +89,8 @@ class FindBugsGolangCli:
         exclude_bug_statuses: List[str],
         jql_filter: str,
         dry_run: bool,
-        csv_output: bool,
+        output_format: str = None,
+        rpms_only: bool = False,
     ):
         self._runtime = runtime
         self._logger = LOGGER
@@ -104,7 +105,8 @@ class FindBugsGolangCli:
         self.exclude_bug_statuses = exclude_bug_statuses
         self.jql_filter = jql_filter
         self.dry_run = dry_run
-        self.csv_output = csv_output
+        self.output_format = output_format
+        self.rpms_only = rpms_only
 
         # cache
         self.pullspec = pullspec
@@ -496,6 +498,25 @@ class FindBugsGolangCli:
         logger.info(f"After filtering invalid bugs: {len(bugs)}/{initial_bug_count} remaining")
         if filtered_bugs:
             logger.info(f"Filtered out bugs: {filtered_bugs}")
+
+        # If rpms_only is set, filter out builder container bugs and image components
+        if self.rpms_only:
+            initial_bug_count = len(bugs)
+            filtered_bugs_rpms_only = []
+            for b in bugs:
+                # Skip builder container bugs
+                if b.whiteboard_component == constants.GOLANG_BUILDER_CVE_COMPONENT:
+                    continue
+                # Skip image components (those that start with "openshift<digit>/")
+                if re.match(r'^openshift\d+/', b.whiteboard_component):
+                    continue
+                filtered_bugs_rpms_only.append(b)
+
+            filtered_out = initial_bug_count - len(filtered_bugs_rpms_only)
+            bugs = filtered_bugs_rpms_only
+            if filtered_out > 0:
+                logger.info(f"Filtered out {filtered_out} builder/image component bug(s) due to --rpms-only flag")
+
         if not bugs:
             return
 
@@ -600,17 +621,17 @@ class FindBugsGolangCli:
         table = PrettyTable()
         table.align = "l"
         table.field_names = [
-            "Jira ID",
-            "Target Version",
-            "CVE",
+            "id",
+            "target_version",
+            "cve",
             "pscomponent",
-            "Status",
-            "Fixed",
-            "ART managed",
-            "Backported compiler build needed",
-            "NVRs",
-            "Expected Golang",
-            "Actual Golang",
+            "status",
+            "fixed",
+            "art_managed",
+            "backport_needed",
+            "nvrs",
+            "golang_expected",
+            "golang_actual",
         ]
 
         fixed_bugs, unfixed_bugs, updated_bugs = [], [], []
@@ -698,8 +719,9 @@ class FindBugsGolangCli:
             self._logger.info(f'{"DRY-RUN: " if self.dry_run else ""}Bugs updated: {sorted(updated_bugs)}')
 
         self._logger.info(f"\n{table}")
-        if self.csv_output:
-            print(table.get_formatted_string("csv"))
+        if self.output_format:
+            header = True if self.output_format == 'csv' else False
+            print(table.get_formatted_string(self.output_format, header=header))
 
 
 @cli.command("find-bugs:golang", short_help="Find, analyze and update golang tracker bugs")
@@ -748,7 +770,17 @@ class FindBugsGolangCli:
 )
 @click.option("--jql-filter", help="JQL filter to apply to the search")
 @click.option("--dry-run", "--noop", is_flag=True, default=False, help="Don't change anything")
-@click.option("--csv-output", is_flag=True, default=False, help="Output in CSV format")
+@click.option(
+    "--output",
+    "-o",
+    "output_format",
+    type=click.Choice(["json", "csv"]),
+    default=None,
+    help="Output format for unfixed bugs table (json or csv)",
+)
+@click.option(
+    "--rpms-only", is_flag=True, default=False, help="Ignore builder container bugs and only analyze RPM trackers"
+)
 @click.pass_obj
 @click_coroutine
 async def find_bugs_golang_cli(
@@ -765,7 +797,8 @@ async def find_bugs_golang_cli(
     exclude_bug_statuses: str,
     jql_filter: str,
     dry_run: bool,
-    csv_output: bool,
+    output_format: str,
+    rpms_only: bool,
 ):
     """Find golang security tracker bugs in jira and determine if they are fixed.
     Trackers are fetched from the OCPBUGS project
@@ -875,6 +908,7 @@ async def find_bugs_golang_cli(
         exclude_bug_statuses=exclude_bug_statuses,
         jql_filter=jql_filter,
         dry_run=dry_run,
-        csv_output=csv_output,
+        output_format=output_format,
+        rpms_only=rpms_only,
     )
     await cli.run()
