@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Tuple
@@ -20,7 +19,6 @@ from artcommonlib.util import (
     uses_konflux_imagestream_override,
     validate_build_priority,
 )
-from doozerlib.constants import ART_BUILD_HISTORY_URL
 
 from pyartcd import constants, jenkins, locks, oc, util
 from pyartcd import record as record_util
@@ -28,6 +26,7 @@ from pyartcd.cli import cli, click_coroutine, pass_runtime
 from pyartcd.locks import Lock
 from pyartcd.runtime import Runtime
 from pyartcd.util import (
+    build_history_link_url,
     get_group_images,
     get_group_rpms,
     increment_rebase_fail_counter,
@@ -647,39 +646,6 @@ class KonfluxOcpPipeline:
             record_log: dict = record_util.parse_record_log(file)
             return record_log
 
-    def add_build_history_link(self, days: int = 2):
-        """
-        Add a link to art-build-history in the Jenkins job description.
-        Shows both successful and failed builds from this specific job.
-
-        Arg(s):
-            days (int): Number of days to look back for build history (default: 2)
-        """
-        start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%d')
-        end_date = (datetime.now(timezone.utc)).strftime('%Y-%m-%d')
-        job_url = os.getenv('BUILD_URL', '')
-
-        # Build URL with parameters in correct order and include empty parameters
-        build_history_url = (
-            f'{ART_BUILD_HISTORY_URL}/?name=&group=openshift-{self.version}&assembly={self.assembly}'
-            f'&outcome=success&outcome=failure&engine=konflux'
-            f'&dateRange={start_date}+to+{end_date}'
-            f'&nvr=&record_id=&image_sha_tag=&source_repo=&commitish='
-        )
-        if job_url:
-            # Jenkins BUILD_URL has single-encoded job paths (build%2Focp4-konflux).
-            # Art-build-history needs double-encoded paths (build%252Focp4-konflux) after URL decoding.
-            # To achieve this, we need to:
-            # 1. Replace %2F with %252F to get build%252Focp4-konflux
-            # 2. URL-encode the entire string so %252F becomes %25252F in the parameter
-            # 3. When art-build-history decodes, %25252F becomes %252F, giving us build%252Focp4-konflux
-            job_url = job_url.replace('%2F', '%252F')
-            # Manually encode to ensure % is encoded as %25
-            encoded_job_url = job_url.replace('%', '%25').replace('/', '%2F').replace(':', '%3A')
-            build_history_url += f'&art-job-url={encoded_job_url}'
-
-        jenkins.update_description(f'<a href="{build_history_url}">View build history</a><br/>')
-
     async def request_mass_rebuild(self):
         await self.slack_client.say(
             f':konflux: :loading-correct: Enqueuing mass rebuild for {self.version} :loading-correct:'
@@ -801,7 +767,11 @@ class KonfluxOcpPipeline:
                 await self.clean_up()
             finally:
                 # Add link to art-build-history at the end of the job
-                self.add_build_history_link(days=2)
+                job_url = os.getenv('BUILD_URL', '')
+                build_history_url = build_history_link_url(
+                    group=f'openshift-{self.version}', assembly=self.assembly, days=2, job_url=job_url
+                )
+                jenkins.update_description(f'<a href="{build_history_url}">View build history</a><br/>')
 
             # Re-raise to mark build as UNSTABLE if any critical operations failed
             if critical_failures:
