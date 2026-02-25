@@ -45,7 +45,43 @@
             "gpgcheck?": {
               "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/gpgcheck"
             },
-            "gpgcheck-": {}
+            "gpgcheck-": {},
+            "repo_type": {
+              "type": "string",
+              "description": "Repository type for the build (e.g. signed, unsigned)"
+            },
+            "repo_type!": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/repo_type"
+            },
+            "repo_type?": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/repo_type"
+            },
+            "repo_type-": {},
+            "signing_intent": {
+              "type": "string",
+              "description": "Signing intent for the build (e.g. release, unsigned)"
+            },
+            "signing_intent!": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/signing_intent"
+            },
+            "signing_intent?": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/signing_intent"
+            },
+            "signing_intent-": {},
+            "repo_list": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of repos for the build"
+            },
+            "repo_list!": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/repo_list"
+            },
+            "repo_list?": {
+              "$ref": "#/properties/image/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/repo_list"
+            },
+            "repo_list-": {}
           },
           "additionalProperties": false
         }
@@ -77,7 +113,21 @@
             "targets?": {
               "$ref": "#/properties/rpm/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/targets"
             },
-            "targets-": {}
+            "targets-": {},
+            "hotfix_targets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "RPM hotfix build targets"
+            },
+            "hotfix_targets!": {
+              "$ref": "#/properties/rpm/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/hotfix_targets"
+            },
+            "hotfix_targets?": {
+              "$ref": "#/properties/rpm/patternProperties/%5E%5Ba-zA-Z0-9_-%5D+$/properties/hotfix_targets"
+            },
+            "hotfix_targets-": {}
           },
           "additionalProperties": false
         }
