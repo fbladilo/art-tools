@@ -1430,15 +1430,20 @@ class PrepareReleaseKonfluxPipeline:
         nightlies = get_assembly_basis(self.releases_config, self.assembly).get("reference_releases", {}).values()
         candidate_nightlies = nightlies_with_pullspecs(nightlies)
 
+        # Convert MissingModel to empty string to avoid Jinja2 rendering errors
+        rhcos_advisory = self.updated_assembly_group_config.advisories.rhcos or ''
+        rpm_advisory = self.updated_assembly_group_config.advisories.rpm or ''
+        shipment_url = self.updated_assembly_group_config.shipment.url or ''
+
         return {
             "release_name": self.release_name,
             "x": self.release_version[0],
             "y": self.release_version[1],
             "z": self.release_version[2],
             "release_date": self.release_date,
-            "rhcos_advisory": self.updated_assembly_group_config.advisories['rhcos'],
-            "rpm_advisory": self.updated_assembly_group_config.advisories['rpm'],
-            "shipment_url": self.updated_assembly_group_config.shipment.url,
+            "rhcos_advisory": rhcos_advisory,
+            "rpm_advisory": rpm_advisory,
+            "shipment_url": shipment_url,
             "candidate_nightlies": candidate_nightlies,
         }
 
