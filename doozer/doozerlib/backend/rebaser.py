@@ -1149,9 +1149,13 @@ class KonfluxRebaser:
         self._logger.info(f"Found required {artifact_type} artifact: {matching_artifact}")
         return matching_artifact
 
-    def _get_module_enablement_commands(self, metadata: ImageMetadata) -> List[str]:
+    def _get_module_enablement_commands(self, metadata: ImageMetadata, previous_lines: List[str] = None) -> List[str]:
         """
         Generate DNF module enable commands for RHEL 9+ images with lockfile modules.
+
+        Args:
+            metadata: ImageMetadata for the image being processed
+            previous_lines: List of previous Dockerfile lines to check for existing USER 0
 
         Returns:
             List[str]: List of RUN commands to enable modules, or empty list if no modules needed
@@ -1178,9 +1182,23 @@ class KonfluxRebaser:
         modules_list = ' '.join(sorted(modules_to_install))
         self._logger.info(f"Enabling modules for {metadata.distgit_key}: {modules_list}")
 
-        return [
-            f"RUN dnf module enable -y {modules_list}",
-        ]
+        # Check if USER 0 was already added in recent lines
+        user_zero_needed = True
+        if previous_lines:
+            # Look for the most recent USER command
+            for line in reversed(previous_lines):
+                if line.strip().startswith("USER "):
+                    if line.strip() == "USER 0":
+                        user_zero_needed = False
+                    # Found a USER command, stop looking (whether it's USER 0 or not)
+                    break
+
+        commands = []
+        if user_zero_needed:
+            commands.append("USER 0")
+        commands.append(f"RUN dnf module enable -y {modules_list}")
+
+        return commands
 
     def _add_build_repos(self, dfp: DockerfileParser, metadata: ImageMetadata, dest_dir: Path):
         # Populating the repo file needs to happen after every FROM before the original Dockerfile can invoke yum/dnf.
@@ -1380,7 +1398,7 @@ class KonfluxRebaser:
                 "ENV HTTPS_PROXY='http://127.0.0.1:9999'",
             ]
 
-        module_enable_commands = self._get_module_enablement_commands(metadata)
+        module_enable_commands = self._get_module_enablement_commands(metadata, konflux_lines)
         if module_enable_commands:
             konflux_lines.extend(module_enable_commands)
 
