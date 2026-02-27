@@ -45,8 +45,8 @@ class Jobs(Enum):
     RHCOS_SYNC = 'aos-cd-builds/build%2Frhcos_sync'
     BUILD_PLASHETS = 'aos-cd-builds/build%2Fbuild-plashets'
     BUILD_FBC = 'aos-cd-builds/build%2Fbuild-fbc'
-    OADP = 'aos-cd-builds/build%2Flayered-products'
-    OADP_SCAN = 'aos-cd-builds/build%2Flayered-products-scan'
+    LAYERED_PRODUCTS = 'aos-cd-builds/build%2Flayered-products'
+    LAYERED_PRODUCTS_SCAN = 'aos-cd-builds/build%2Flayered-products-scan'
     SCAN_PLASHET_RPMS = 'scanning/scanning%2Fplashet-rpms'
     SCAN_OPERATOR = 'aos-cd-builds/build%2Fscan-operator'
 
@@ -749,15 +749,10 @@ def start_layered_products(
         params['IMAGE_LIST'] = ','.join(image_list)
 
     return start_build(
-        job=Jobs.OADP,
+        job=Jobs.LAYERED_PRODUCTS,
         params=params,
         **kwargs,
     )
-
-
-# Backward compatibility shim for old OADP function name
-def start_oadp(*args, **kwargs) -> Optional[str]:
-    return start_layered_products(*args, **kwargs)
 
 
 def start_layered_products_scan_konflux(group: str, assembly: str = "stream", **kwargs) -> Optional[str]:
@@ -767,7 +762,7 @@ def start_layered_products_scan_konflux(group: str, assembly: str = "stream", **
     }
 
     return start_build(
-        job=Jobs.OADP_SCAN,
+        job=Jobs.LAYERED_PRODUCTS_SCAN,
         params=params,
         **kwargs,
     )
