@@ -1162,6 +1162,13 @@ class ImageMetadata(Metadata):
 
             rpms = set(build.installed_rpms or [])
 
+            # DEBUG: log sample entries to determine format (NVR vs name)
+            perl_dbi_entries = [r for r in rpms if 'perl-DBI' in r]
+            if perl_dbi_entries:
+                self.logger.info(f"DEBUG fetch_rpms_from_build: perl-DBI entries in installed_rpms: {sorted(perl_dbi_entries)}")
+            sample = sorted(rpms)[:5]
+            self.logger.info(f"DEBUG fetch_rpms_from_build: {len(rpms)} total RPMs, sample: {sample}")
+
             if not rpms:
                 self.logger.debug(
                     f"Build record for {self.distgit_key} has no installed_rpms, skipping parent calculation"

@@ -324,6 +324,11 @@ class RpmInfoCollector:
         pinned_by_nvr: dict[str, RpmInfo] = {}
         resolved_items: set[str] = set()
 
+        # DEBUG: log perl-DBI input items
+        dbi_inputs = [item for item in rpm_names if 'perl-DBI' in item and 'debuginfo' not in item and 'debugsource' not in item]
+        if dbi_inputs:
+            self.logger.info(f"DEBUG [{arch}] perl-DBI input items: {sorted(dbi_inputs)}")
+
         for repo_name in sort_repos_for_lockfile_resolution(repo_names):
             repodata = self.loaded_repos.get(f'{repo_name}-{arch}')
             if repodata is None:
@@ -338,6 +343,11 @@ class RpmInfoCollector:
                 continue
 
             found_rpms, not_found = repodata.get_rpms(rpm_names, arch)
+
+            # DEBUG: log perl-DBI found RPMs from get_rpms
+            dbi_found = [rpm for rpm in found_rpms if rpm.name == 'perl-DBI']
+            if dbi_found:
+                self.logger.info(f"DEBUG [{arch}] get_rpms returned {len(dbi_found)} perl-DBI RPMs from {repo_name}: {[rpm.nevra for rpm in dbi_found]}")
             resolved_items |= rpm_names - set(not_found)
 
             content_set_id = repo.content_set(arch)
@@ -373,6 +383,13 @@ class RpmInfoCollector:
                 f"Could not find {','.join(sorted(missing))} in {', '.join(repo_names)} for arch {arch}"
             )
 
+        # DEBUG: log perl-DBI state after phase 1
+        if 'perl-DBI' in best_by_name:
+            self.logger.info(f"DEBUG [{arch}] Phase 1 result: best_by_name['perl-DBI'] = {best_by_name['perl-DBI'].evr}, modular={best_is_modular.get('perl-DBI')}")
+        dbi_pinned = {k: v for k, v in pinned_by_nvr.items() if 'perl-DBI' in k}
+        if dbi_pinned:
+            self.logger.info(f"DEBUG [{arch}] Phase 1 pinned_by_nvr perl-DBI entries: {[(k, v.evr) for k, v in dbi_pinned.items()]}")
+
         # Fix: when get_rpms() returned a modular RPM from a non-enabled module
         # (because it was the highest EVR in that repo), search primary_rpms
         # directly for a non-modular alternative with a lower EVR.
@@ -397,6 +414,10 @@ class RpmInfoCollector:
                 if not best_is_modular.get(pkg_name):
                     break
 
+        # DEBUG: log perl-DBI state after phase 2
+        if 'perl-DBI' in best_by_name:
+            self.logger.info(f"DEBUG [{arch}] Phase 2 result: best_by_name['perl-DBI'] = {best_by_name['perl-DBI'].evr}, modular={best_is_modular.get('perl-DBI')}")
+
         # Second pass: for enabled modules, resolve RPMs directly from module
         # metadata instead of relying on EVR comparison from primary.xml.
         # This ensures correct module context selection and overrides any
@@ -409,6 +430,11 @@ class RpmInfoCollector:
             results[(info.name, info.evr)] = info
         for info in pinned_by_nvr.values():
             results[(info.name, info.evr)] = info
+
+        # DEBUG: log final perl-DBI entries in results
+        dbi_results = [(k, v.evr) for k, v in results.items() if k[0] == 'perl-DBI']
+        if dbi_results:
+            self.logger.info(f"DEBUG [{arch}] Final results perl-DBI entries: {dbi_results}")
 
         return sorted(results.values())
 
