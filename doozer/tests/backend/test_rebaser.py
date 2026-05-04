@@ -1337,8 +1337,6 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         parent.qualified_key = "openshift/golang-builder"
         parent.private_fix = False
         parent.image_name_short = "golang-builder"
-        parent.rebased_image_version = "v1.21"
-        parent.rebased_image_release = "1.el9"
         parent.get_component_name.return_value = "openshift-golang-builder-container"
         parent.should_trigger_base_image_release.return_value = True
 
@@ -1351,6 +1349,7 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         rebaser.image_repo = "quay.io/fake"
         rebaser.uuid_tag = "v4.18-abc"
         rebaser.group = "openshift-4.18"
+        rebaser._rebased_nvr_info["golang-builder"] = ("v1.21", "1.el9")
 
         resolved, _embargo = await rebaser._resolve_member_parent("golang-builder", "ignored")
         self.assertEqual(

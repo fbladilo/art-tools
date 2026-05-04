@@ -92,6 +92,7 @@ class KonfluxRebaser:
         self.uuid_tag = ''
         self.variant = variant
         self.extra_labels = extra_labels or {}
+        self._rebased_nvr_info: Dict[str, Tuple[str, str]] = {}
 
         self.konflux_db = self._runtime.konflux_db
         if self.konflux_db:
@@ -225,8 +226,7 @@ class KonfluxRebaser:
                 force = (self._runtime.assembly != "stream") or (build_repo.url != build_repo.pull_url)
                 await build_repo.push(force=force)
 
-            metadata.rebased_image_version = actual_version
-            metadata.rebased_image_release = actual_release
+            self._rebased_nvr_info[metadata.distgit_key] = (actual_version, actual_release)
             metadata.rebase_status = True
         finally:
             # notify child images
@@ -392,13 +392,13 @@ class KonfluxRebaser:
 
     def _rebased_member_image_nvr(self, parent_metadata: ImageMetadata) -> str:
         """NVR from parent's rebase (same as Dockerfile labels / Konflux DB): component-version-release."""
-        version = parent_metadata.rebased_image_version
-        release = parent_metadata.rebased_image_release
-        if not version or not release:
+        nvr_info = self._rebased_nvr_info.get(parent_metadata.distgit_key)
+        if not nvr_info:
             raise IOError(
-                f"Parent image {parent_metadata.distgit_key} has no rebased_image_version/rebased_image_release; "
-                f"expected KonfluxRebaser to set them after a successful rebase."
+                f"Parent image {parent_metadata.distgit_key} has no rebased NVR in this KonfluxRebaser session; "
+                f"expected a successful rebase_to for that image first."
             )
+        version, release = nvr_info
         return f"{parent_metadata.get_component_name()}-{version}-{release}"
 
     @staticmethod
