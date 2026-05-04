@@ -359,6 +359,8 @@ class KonfluxImageBuilder:
 
                 else:
                     # Create a build record after every attempt (both success and failure)
+                    # Base images need a synchronous release to registry.redhat.io before dependents can use RH
+                    # pullspecs. Mark SUCCESS as UNRELEASED in the DB until that release completes; see below.
                     if outcome is KonfluxBuildOutcome.SUCCESS and metadata.should_trigger_base_image_release():
                         outcome = KonfluxBuildOutcome.UNRELEASED
 

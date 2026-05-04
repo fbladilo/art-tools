@@ -195,7 +195,7 @@ class BaseImageHandler:
             records = await self.konflux_db.get_build_records_by_nvrs(
                 nvrs, outcome=KonfluxBuildOutcome.UNRELEASED, where=where, strict=False, exclude_large_columns=True
             )
-            return {record.nvr: record for record in records}
+            return {record.nvr: record for record in records if record is not None}
         except Exception as e:
             self.logger.warning(f"Failed to fetch build records from database: {e}")
             return {}
