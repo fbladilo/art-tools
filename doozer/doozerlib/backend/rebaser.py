@@ -552,7 +552,7 @@ class KonfluxRebaser:
                     "This indicates a bug in Doozer. Please report this issue.",
                 )
             private_fix = parent_metadata.private_fix
-            if self.variant is not BuildVariant.OKD and parent_metadata.should_trigger_base_image_release():
+            if parent_metadata.should_trigger_base_image_release():
                 parent_nvr = self._rebased_member_image_nvr(parent_metadata)
                 return util.rh_art_images_base_pullspec(parent_nvr), private_fix
             return f"{self.image_repo}:{parent_metadata.image_name_short}-{self.uuid_tag}", private_fix
