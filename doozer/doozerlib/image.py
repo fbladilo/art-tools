@@ -5,6 +5,7 @@ import pathlib
 import re
 from collections import OrderedDict
 from copy import copy
+from datetime import datetime, timezone
 from functools import lru_cache
 from multiprocessing import Event
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
@@ -26,6 +27,47 @@ from doozerlib.build_info import BrewBuildRecordInspector
 from doozerlib.distgit import pull_image
 from doozerlib.metadata import Metadata, RebuildHint, RebuildHintCode
 from doozerlib.source_resolver import SourceResolver
+
+
+def _lockfile_seed_build_completion_ts(record: KonfluxBuildRecord) -> datetime:
+    """Best-effort completion timestamp for comparing Konflux builds (end_time, else start_time)."""
+    t = record.end_time or record.start_time
+    if t is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc)
+
+
+def _pick_lockfile_seed_build(
+    success_build: Optional[KonfluxBuildRecord],
+    unreleased_build: Optional[KonfluxBuildRecord],
+) -> Optional[KonfluxBuildRecord]:
+    """
+    Choose which Konflux DB row should seed lockfile installed_rpms: the latest of SUCCESS and UNRELEASED
+    by completion time. If the time-newest row has no installed_rpms, prefer the other when it does.
+    """
+    raw = [b for b in (success_build, unreleased_build) if b is not None]
+    candidates = []
+    seen_ids: set[int] = set()
+    for b in raw:
+        bid = id(b)
+        if bid not in seen_ids:
+            seen_ids.add(bid)
+            candidates.append(b)
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        chosen = candidates[0]
+    else:
+        a, b = candidates[0], candidates[1]
+        chosen = a if _lockfile_seed_build_completion_ts(a) > _lockfile_seed_build_completion_ts(b) else b
+
+    if not (chosen.installed_rpms or []):
+        for other in candidates:
+            if other is not chosen and (other.installed_rpms or []):
+                return other
+    return chosen
 
 
 @lru_cache(maxsize=256)
@@ -1131,6 +1173,10 @@ class ImageMetadata(Metadata):
         Returns either the full image RPM set or difference from parent packages,
         based on the inspect_parent configuration. Caches result in installed_rpms attribute.
 
+        When resolving the latest build (no matching lockfile_seed_nvrs), uses the newer of the
+        latest **success** and **unreleased** Konflux outcomes by build completion time so that
+        images waiting on release still contribute fresh SBOM RPMs to lockfile generation.
+
         Args:
             lockfile_seed_nvrs: NVRs of builds whose installed RPMs should seed lockfile
                 generation. When provided, the method checks these NVRs first and uses the
@@ -1157,12 +1203,25 @@ class ImageMetadata(Metadata):
             if build is None:
                 base_search_params = {
                     'group': self.runtime.group,
-                    'outcome': "success",
                     'engine': self.runtime.build_system,
                     'name': self.distgit_key,
                     'assembly': self.runtime.assembly,
                 }
-                build = await self.runtime.konflux_db.get_latest_build(**base_search_params)
+                build_success = await self.runtime.konflux_db.get_latest_build(
+                    **base_search_params, outcome=KonfluxBuildOutcome.SUCCESS
+                )
+                build_unreleased = await self.runtime.konflux_db.get_latest_build(
+                    **base_search_params, outcome=KonfluxBuildOutcome.UNRELEASED
+                )
+                build = _pick_lockfile_seed_build(build_success, build_unreleased)
+                if build:
+                    self.logger.info(
+                        'Lockfile seed for %s: nvr=%s outcome=%s end_time=%s',
+                        self.distgit_key,
+                        getattr(build, 'nvr', None),
+                        build.outcome,
+                        build.end_time,
+                    )
 
             if not build:
                 self.logger.debug(f"No build record found for {self.distgit_key}/{self.runtime.group}")
