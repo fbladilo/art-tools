@@ -996,14 +996,16 @@ class KonfluxImageBuilder:
                     f"pipelinerun {pipelinerun_name}"
                 )
 
+            quay_image_pullspec = f"{image_pullspec.split(':')[0]}@{image_digest}"
             if released:
                 definitive_image_pullspec = util.rh_art_images_base_pullspec(nvr)
             else:
-                definitive_image_pullspec = f"{image_pullspec.split(':')[0]}@{image_digest}"
+                definitive_image_pullspec = quay_image_pullspec
 
-            # use image_digest here to be precise, image_pullspec can collide in case of golang-builder images
+            # Always fetch SBOM from quay — it is attached to the Konflux-built
+            # image, not mirrored to registry.redhat.io by the release pipeline.
             package_nvrs, source_rpms = await self.get_installed_packages(
-                definitive_image_pullspec, building_arches, self._config.registry_auth_file
+                quay_image_pullspec, building_arches, self._config.registry_auth_file
             )
 
             build_record_params.update(
