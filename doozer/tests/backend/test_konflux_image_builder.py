@@ -298,7 +298,7 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs['ec_policy'], constants.KONFLUX_DEFAULT_EC_POLICY_CONFIGURATION)
 
     async def test_update_konflux_db_with_released_true_sets_registry_pullspec(self):
-        """Test that released=True sets registry.redhat.io pullspec for base images."""
+        """Test that released=True stores registry.redhat.io pullspec in DB but fetches SBOM from quay."""
         metadata = self._metadata()
         metadata.should_trigger_base_image_release.return_value = True
         build_repo = MagicMock()
@@ -347,7 +347,7 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
             mock_dockerfile_parser.return_value = mock_dockerfile
             mock_bigquery_client.return_value.client.insert_rows_json.return_value = None
 
-            await self.builder.update_konflux_db(
+            record = await self.builder.update_konflux_db(
                 metadata,
                 build_repo,
                 pipelinerun,
@@ -357,8 +357,13 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
                 released=True,
             )
 
-        expected_pullspec = "registry.redhat.io/openshift/art-images-base:test-component-1.0-1.el9"
-        mock_get_installed_packages.assert_awaited_once_with(expected_pullspec, ["x86_64"], None)
+        # SBOM must be fetched from quay (where Konflux attaches it), not registry.redhat.io
+        quay_pullspec = "quay.io/test/image@sha256:testdigest"
+        mock_get_installed_packages.assert_awaited_once_with(quay_pullspec, ["x86_64"], None)
+
+        # DB record should store the registry.redhat.io pullspec for downstream consumers
+        expected_registry_pullspec = "registry.redhat.io/openshift/art-images-base:test-component-1.0-1.el9"
+        self.assertEqual(record.image_pullspec, expected_registry_pullspec)
 
     async def test_update_konflux_db_with_released_false_uses_quay_pullspec(self):
         """Test that released=False uses standard quay.io pullspec."""
