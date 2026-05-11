@@ -297,8 +297,8 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
         call_kwargs = mock_verify_ec.await_args[1]
         self.assertEqual(call_kwargs['ec_policy'], constants.KONFLUX_DEFAULT_EC_POLICY_CONFIGURATION)
 
-    async def test_update_konflux_db_with_released_true_sets_registry_pullspec(self):
-        """Test that released=True sets registry.redhat.io pullspec for base images."""
+    async def test_update_konflux_db_success_keeps_konflux_digest_after_base_release_completion(self):
+        """Final SUCCESS after base-image release keeps Konflux digest in DB for SBOM (not RH tag)."""
         metadata = self._metadata()
         metadata.should_trigger_base_image_release.return_value = True
         build_repo = MagicMock()
@@ -354,69 +354,6 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
                 KonfluxBuildOutcome.SUCCESS,
                 ["x86_64"],
                 "5",
-                released=True,
-            )
-
-        expected_pullspec = "registry.redhat.io/openshift/art-images-base:test-component-1.0-1.el9"
-        mock_get_installed_packages.assert_awaited_once_with(expected_pullspec, ["x86_64"], None)
-
-    async def test_update_konflux_db_with_released_false_uses_quay_pullspec(self):
-        """Test that released=False uses standard quay.io pullspec."""
-        metadata = self._metadata()
-        build_repo = MagicMock()
-        build_repo.https_url = "https://example.com/repo.git"
-        build_repo.commit_hash = "test-commit-hash"
-        build_repo.local_dir = Path(self.temp_dir.name)
-
-        pipelinerun = PipelineRunInfo(
-            {
-                "metadata": {
-                    "name": "test-pipelinerun",
-                    "uid": "test-uid",
-                    "labels": {"appstudio.openshift.io/component": "test-component"},
-                },
-                "status": {
-                    "results": [
-                        {"name": "IMAGE_URL", "value": "quay.io/test/image:test-tag"},
-                        {"name": "IMAGE_DIGEST", "value": "sha256:testdigest"},
-                    ],
-                    "startTime": "2023-10-01T12:00:00Z",
-                    "completionTime": "2023-10-01T12:30:00Z",
-                },
-            },
-            {},
-        )
-
-        with (
-            patch("doozerlib.backend.konflux_image_builder.DockerfileParser") as mock_dockerfile_parser,
-            patch.object(self.builder, "extract_parent_image_nvrs", new=AsyncMock(return_value=[])),
-            patch.object(
-                self.builder,
-                "get_installed_packages",
-                new=AsyncMock(return_value=({"pkg-1.0-1"}, {"srcpkg-1.0-1"})),
-            ) as mock_get_installed_packages,
-            patch("doozerlib.backend.konflux_image_builder.bigquery.BigQueryClient") as mock_bigquery_client,
-        ):
-            mock_dockerfile = MagicMock()
-            mock_dockerfile.labels = {
-                "io.openshift.build.source-location": "https://example.com/source-repo.git",
-                "io.openshift.build.commit.id": "source-commit-id",
-                "com.redhat.component": "test-component",
-                "version": "1.0",
-                "release": "1.el9",
-            }
-            mock_dockerfile.parent_images = []
-            mock_dockerfile_parser.return_value = mock_dockerfile
-            mock_bigquery_client.return_value.client.insert_rows_json.return_value = None
-
-            await self.builder.update_konflux_db(
-                metadata,
-                build_repo,
-                pipelinerun,
-                KonfluxBuildOutcome.SUCCESS,
-                ["x86_64"],
-                "5",
-                released=False,
             )
 
         expected_pullspec = "quay.io/test/image@sha256:testdigest"
@@ -478,14 +415,13 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
                 KonfluxBuildOutcome.UNRELEASED,
                 ["x86_64"],
                 "5",
-                released=False,
             )
 
         expected_pullspec = "quay.io/test/image@sha256:testdigest"
         mock_get_installed_packages.assert_awaited_once_with(expected_pullspec, ["x86_64"], None)
 
     async def test_trigger_base_image_release_success_flow(self):
-        """Test successful base image release triggering with registry pullspec update."""
+        """SUCCESS after base snapshot release refreshes Konflux DB without swapping image_pullspec to RH."""
         metadata = self._metadata()
         metadata.should_trigger_base_image_release.return_value = True
         metadata.is_snapshot_release_enabled.return_value = True
@@ -544,12 +480,10 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
 
         mock_trigger_release.assert_awaited_once()
 
-        # Verify database was updated twice: initial PENDING + final SUCCESS with released=True
+        # PENDING write + UNRELEASED write + SUCCESS after release
         self.assertEqual(mock_update_db.await_count, 3)
-
-        # Check that the final call had released=True
-        final_call_kwargs = mock_update_db.await_args_list[2][1]
-        self.assertTrue(final_call_kwargs.get('released', False))
+        success_call_args = mock_update_db.await_args_list[2][0]
+        self.assertEqual(success_call_args[3], KonfluxBuildOutcome.SUCCESS)
 
     async def test_trigger_base_image_release_failure_flow(self):
         """Test base image release failure handling with FAILURE outcome update."""
@@ -613,11 +547,9 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
         mock_trigger_release.assert_awaited_once()
         self.assertEqual(mock_update_db.await_count, 3)
 
-        # Check that the failure update call had outcome=FAILURE and no released=True
+        # Final update records FAILURE outcome
         failure_call_args = mock_update_db.await_args_list[2][0]
-        failure_call_kwargs = mock_update_db.await_args_list[2][1]
         self.assertEqual(failure_call_args[3], KonfluxBuildOutcome.FAILURE)
-        self.assertFalse(failure_call_kwargs.get('released', False))
 
     async def test_non_base_image_skips_release_trigger(self):
         """Test that non-base images skip the release trigger logic entirely."""

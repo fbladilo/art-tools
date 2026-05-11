@@ -1357,6 +1357,68 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
             "registry.redhat.io/openshift/art-images-base:openshift-golang-builder-container-v1.21-1.el9",
         )
 
+    async def test_resolve_member_parent_late_resolve_uses_rh_art_base_tag(self):
+        """Late-resolve (DB) base/golang: RH art-images-base if tag is reachable, else Konflux digest from DB."""
+        parent = MagicMock()
+        parent.distgit_key = "golang-builder"
+        parent.should_trigger_base_image_release.return_value = True
+        parent.branch_el_target.return_value = 9
+        kb = MagicMock()
+        kb.nvr = "openshift-golang-builder-container-v1.21-1.el9"
+        kb.image_pullspec = "quay.io/k@sha256:abc"
+        kb.embargoed = False
+        parent.get_latest_build = AsyncMock(return_value=kb)
+
+        runtime = MagicMock()
+        runtime.resolve_image.return_value = None
+        runtime.ignore_missing_base = True
+        runtime.latest_parent_version = True
+        runtime.late_resolve_image = MagicMock(return_value=parent)
+        runtime.group_config = Model({"konflux": Model({})})
+
+        rebaser = KonfluxRebaser(runtime, self.base_dir, MagicMock(), "unsigned")
+        rebaser.variant = BuildVariant.OCP
+        rebaser.image_repo = "quay.io/fake"
+        rebaser.uuid_tag = "v4.18-tag"
+        rebaser.group = "openshift-4.18"
+        rebaser._registry_pullspec_exists = AsyncMock(return_value=True)
+
+        resolved, emb = await rebaser._resolve_member_parent("golang-builder", "orig")
+        self.assertEqual(
+            resolved, "registry.redhat.io/openshift/art-images-base:openshift-golang-builder-container-v1.21-1.el9"
+        )
+        self.assertFalse(emb)
+
+    async def test_resolve_member_parent_late_resolve_falls_back_to_db_pullspec_when_art_base_missing(self):
+        """Late-resolved golang parent: use RH only if tag exists; otherwise Konflux digest from DB."""
+        parent = MagicMock()
+        parent.distgit_key = "golang-builder"
+        parent.should_trigger_base_image_release.return_value = True
+        parent.branch_el_target.return_value = 9
+        kb = MagicMock()
+        kb.nvr = "openshift-golang-builder-container-v1.21-1.el9"
+        kb.image_pullspec = "quay.io/k@sha256:beef"
+        kb.embargoed = False
+        parent.get_latest_build = AsyncMock(return_value=kb)
+
+        runtime = MagicMock()
+        runtime.resolve_image.return_value = None
+        runtime.ignore_missing_base = True
+        runtime.latest_parent_version = True
+        runtime.late_resolve_image = MagicMock(return_value=parent)
+        runtime.group_config = Model({"konflux": Model({})})
+
+        rebaser = KonfluxRebaser(runtime, self.base_dir, MagicMock(), "unsigned")
+        rebaser.variant = BuildVariant.OCP
+        rebaser.image_repo = "quay.io/fake"
+        rebaser.uuid_tag = "v4.18-tag"
+        rebaser.group = "openshift-4.18"
+        rebaser._registry_pullspec_exists = AsyncMock(return_value=False)
+
+        resolved, emb = await rebaser._resolve_member_parent("golang-builder", "orig")
+        self.assertEqual(resolved, "quay.io/k@sha256:beef")
+        self.assertFalse(emb)
+
     async def test_resolve_member_parent_keeps_quay_for_regular_member(self):
         parent = MagicMock()
         parent.distgit_key = "ose-cli"
