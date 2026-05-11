@@ -623,13 +623,25 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
         metadata = self._metadata()
         metadata.is_snapshot_release_enabled.return_value = True
 
-        with patch.object(jenkins, 'start_base_image_release', return_value="job-result") as mock_jenkins:
+        with patch.object(jenkins, 'start_base_image_release', return_value="SUCCESS") as mock_jenkins:
             result = await self.builder._trigger_base_image_release(metadata, "test-nvr")
 
         self.assertTrue(result)
         mock_jenkins.assert_called_once()
         call_kwargs = mock_jenkins.call_args[1]
         self.assertTrue(call_kwargs.get('block_until_complete', False))
+
+    async def test_trigger_base_image_release_jenkins_failure_string_returns_false(self):
+        """start_build returns Jenkins result strings; FAILURE must not be treated as success."""
+        from pyartcd import jenkins
+
+        metadata = self._metadata()
+        metadata.is_snapshot_release_enabled.return_value = True
+
+        with patch.object(jenkins, 'start_base_image_release', return_value='FAILURE'):
+            result = await self.builder._trigger_base_image_release(metadata, "test-nvr")
+
+        self.assertFalse(result)
 
     async def test_trigger_base_image_release_respects_snapshot_release_disabled(self):
         """Test that snapshot_release disabled skips base image release."""
