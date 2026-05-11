@@ -47,27 +47,17 @@ def _pick_lockfile_seed_build(
     Choose which Konflux DB row should seed lockfile installed_rpms: the latest of SUCCESS and UNRELEASED
     by completion time. If the time-newest row has no installed_rpms, prefer the other when it does.
     """
-    raw = [b for b in (success_build, unreleased_build) if b is not None]
-    candidates = []
-    seen_ids: set[int] = set()
-    for b in raw:
-        bid = id(b)
-        if bid not in seen_ids:
-            seen_ids.add(bid)
-            candidates.append(b)
+    candidates = [b for b in (success_build, unreleased_build) if b is not None]
     if not candidates:
         return None
-    if len(candidates) == 1:
-        chosen = candidates[0]
-    else:
-        a, b = candidates[0], candidates[1]
-        chosen = a if _lockfile_seed_build_completion_ts(a) > _lockfile_seed_build_completion_ts(b) else b
-
-    if not (chosen.installed_rpms or []):
-        for other in candidates:
-            if other is not chosen and (other.installed_rpms or []):
-                return other
-    return chosen
+    # Newer completion time wins; on equal timestamps prefer the latter (UNRELEASED) like strict `>` ordering.
+    chosen = max(
+        enumerate(candidates),
+        key=lambda ib: (_lockfile_seed_build_completion_ts(ib[1]), ib[0]),
+    )[1]
+    if chosen.installed_rpms:
+        return chosen
+    return next((c for c in candidates if c is not chosen and c.installed_rpms), chosen)
 
 
 @lru_cache(maxsize=256)
@@ -1173,9 +1163,10 @@ class ImageMetadata(Metadata):
         Returns either the full image RPM set or difference from parent packages,
         based on the inspect_parent configuration. Caches result in installed_rpms attribute.
 
-        When resolving the latest build (no matching lockfile_seed_nvrs), uses the newer of the
-        latest **success** and **unreleased** Konflux outcomes by build completion time so that
-        images waiting on release still contribute fresh SBOM RPMs to lockfile generation.
+        When resolving the latest build (no matching lockfile_seed_nvrs): for images that participate
+        in the base-image release workflow (same predicate as Konflux: ``should_trigger_base_image_release()``),
+        uses the newer of the latest **success** and **unreleased** Konflux outcomes by completion time so
+        that builds waiting on release still contribute fresh SBOM RPMs. Other images query **success** only.
 
         Args:
             lockfile_seed_nvrs: NVRs of builds whose installed RPMs should seed lockfile
@@ -1210,10 +1201,13 @@ class ImageMetadata(Metadata):
                 build_success = await self.runtime.konflux_db.get_latest_build(
                     **base_search_params, outcome=KonfluxBuildOutcome.SUCCESS
                 )
-                build_unreleased = await self.runtime.konflux_db.get_latest_build(
-                    **base_search_params, outcome=KonfluxBuildOutcome.UNRELEASED
-                )
-                build = _pick_lockfile_seed_build(build_success, build_unreleased)
+                if self.should_trigger_base_image_release():
+                    build_unreleased = await self.runtime.konflux_db.get_latest_build(
+                        **base_search_params, outcome=KonfluxBuildOutcome.UNRELEASED
+                    )
+                    build = _pick_lockfile_seed_build(build_success, build_unreleased)
+                else:
+                    build = build_success
                 if build:
                     self.logger.info(
                         'Lockfile seed for %s: nvr=%s outcome=%s end_time=%s',

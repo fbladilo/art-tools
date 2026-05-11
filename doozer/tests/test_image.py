@@ -8,6 +8,7 @@ from unittest import IsolatedAsyncioTestCase, mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from artcommonlib import exectools
+from artcommonlib.constants import GOLANG_BUILDER_IMAGE_NAME
 from artcommonlib.konflux.konflux_build_record import KonfluxBuildOutcome
 from artcommonlib.model import Missing, Model
 from artcommonlib.variants import BuildVariant
@@ -1175,9 +1176,9 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
     def setUp(self):
         self.logger = MagicMock()
 
-    def _create_image_metadata(self, name, distgit_key=None):
-        """Helper to create ImageMetadata with mock runtime"""
-        image_model = Model({'name': name})
+    def _create_image_metadata(self, name, distgit_key=None, **extra_image_fields):
+        """Helper to create ImageMetadata with mock runtime (e.g. base_only=True or golang-builder name)."""
+        image_model = Model({'name': name, **extra_image_fields})
         data_obj = Model(
             {
                 'key': distgit_key or 'test-image',
@@ -1232,7 +1233,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, set())
         self.assertEqual(metadata.installed_rpms, [])
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
         self.logger.error.assert_not_called()
 
     async def test_fetch_rpms_from_build_build_no_packages(self):
@@ -1248,7 +1249,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, set())
         self.assertEqual(metadata.installed_rpms, [])
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
         self.logger.error.assert_not_called()
 
     async def test_fetch_rpms_from_build_no_parent_full_package_set(self):
@@ -1269,7 +1270,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
 
         self.assertEqual(result, {'pkg1', 'pkg2', 'pkg3'})
         self.assertEqual(set(metadata.installed_rpms), {'pkg1', 'pkg2', 'pkg3'})
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
 
     async def test_fetch_rpms_from_build_exception_handling(self):
         """Test fetch_rpms_from_build handles exceptions gracefully"""
@@ -1316,7 +1317,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         result = await metadata.fetch_rpms_from_build(lockfile_seed_nvrs=['other-container-v4.22.0-assembly.test'])
 
         self.assertEqual(result, {'latest-pkg1'})
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
 
     async def test_fetch_rpms_from_build_seed_nvr_not_in_db(self):
         """Test fetch_rpms_from_build falls back when seed NVR not found in DB"""
@@ -1331,7 +1332,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         result = await metadata.fetch_rpms_from_build(lockfile_seed_nvrs=['nonexistent-v4.22.0-assembly.test'])
 
         self.assertEqual(result, {'pkg1'})
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
 
     async def test_fetch_rpms_from_build_no_seed_nvrs(self):
         """Test fetch_rpms_from_build works when no lockfile_seed_nvrs are provided"""
@@ -1344,11 +1345,24 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         result = await metadata.fetch_rpms_from_build()
 
         self.assertEqual(result, {'pkg1'})
-        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 2)
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
+
+    async def test_fetch_rpms_from_build_regular_queries_success_only(self):
+        """Non base-image/golang images issue a single SUCCESS get_latest_build (no UNRELEASED query)."""
+        metadata = self._create_image_metadata('openshift/test-regular-lookup')
+        mock_build = MagicMock()
+        mock_build.installed_rpms = ['pkg-a']
+        metadata.runtime.konflux_db.get_latest_build = AsyncMock(return_value=mock_build)
+
+        await metadata.fetch_rpms_from_build()
+
+        self.assertEqual(metadata.runtime.konflux_db.get_latest_build.await_count, 1)
+        called = metadata.runtime.konflux_db.get_latest_build.await_args.kwargs
+        self.assertEqual(called['outcome'], KonfluxBuildOutcome.SUCCESS)
 
     async def test_fetch_rpms_from_build_prefers_newer_unreleased(self):
         """Latest unreleased build wins over older success when seeding lockfile RPMs."""
-        metadata = self._create_image_metadata('openshift/test-newer-unreleased')
+        metadata = self._create_image_metadata(GOLANG_BUILDER_IMAGE_NAME, distgit_key='openshift-golang-builder')
 
         older = MagicMock()
         older.installed_rpms = ['golang-1.22.12-11.el9']
@@ -1371,7 +1385,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
 
     async def test_fetch_rpms_from_build_prefers_newer_success(self):
         """Latest success build wins over older unreleased when seeding lockfile RPMs."""
-        metadata = self._create_image_metadata('openshift/test-newer-success')
+        metadata = self._create_image_metadata(GOLANG_BUILDER_IMAGE_NAME, distgit_key='openshift-golang-builder')
 
         older = MagicMock()
         older.installed_rpms = ['pkg-old']
@@ -1394,7 +1408,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
 
     async def test_fetch_rpms_from_build_uses_other_when_newer_has_no_installed_rpms(self):
         """If the time-newest row has no installed_rpms, use the other candidate when it does."""
-        metadata = self._create_image_metadata('openshift/test-empty-newer')
+        metadata = self._create_image_metadata(GOLANG_BUILDER_IMAGE_NAME, distgit_key='openshift-golang-builder')
 
         newer_empty = MagicMock()
         newer_empty.installed_rpms = []
