@@ -358,6 +358,10 @@ class TestKonfluxImageBuilder(unittest.IsolatedAsyncioTestCase):
 
         expected_pullspec = "quay.io/test/image@sha256:testdigest"
         mock_get_installed_packages.assert_awaited_once_with(expected_pullspec, ["x86_64"], None)
+        mock_add_build = metadata.runtime.konflux_db.add_build
+        mock_add_build.assert_called_once()
+        persisted = mock_add_build.call_args[0][0]
+        self.assertEqual(persisted.image_pullspec, expected_pullspec)
 
     async def test_update_konflux_db_unreleased_sets_quay_pullspec_like_success(self):
         """UNRELEASED (base image build ok, awaiting release) must populate image_pullspec for snapshot workflow."""
