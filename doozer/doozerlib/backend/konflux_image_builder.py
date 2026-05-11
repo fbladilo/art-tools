@@ -1251,12 +1251,13 @@ class KonfluxImageBuilder:
                 dry_run=self._config.dry_run,
                 block_until_complete=True,
             )
-            if result is not None:
+            # start_build(..., block_until_complete=True) returns Jenkins result strings (SUCCESS, FAILURE, …), not None.
+            success = result == "SUCCESS"
+            if success:
                 logger.info(f"Successfully completed base image release for {nvr}")
                 return True
-            else:
-                logger.error(f"Base image release job failed for {nvr}")
-                return False
+            logger.error("Base image release job failed for %s with Jenkins result=%r", nvr, result)
+            return False
 
         except Exception as e:
             logger.error(f"Failed to trigger base image release for {nvr}: {e}")
