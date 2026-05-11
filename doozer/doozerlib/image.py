@@ -47,17 +47,24 @@ def _pick_lockfile_seed_build(
     Choose which Konflux DB row should seed lockfile installed_rpms: the latest of SUCCESS and UNRELEASED
     by completion time. If the time-newest row has no installed_rpms, prefer the other when it does.
     """
-    candidates = [b for b in (success_build, unreleased_build) if b is not None]
-    if not candidates:
+    if success_build is None and unreleased_build is None:
         return None
-    # Newer completion time wins; on equal timestamps prefer the latter (UNRELEASED) like strict `>` ordering.
-    chosen = max(
-        enumerate(candidates),
-        key=lambda ib: (_lockfile_seed_build_completion_ts(ib[1]), ib[0]),
-    )[1]
+    if success_build is None:
+        chosen = unreleased_build
+    elif unreleased_build is None:
+        chosen = success_build
+    else:
+        success_ts = _lockfile_seed_build_completion_ts(success_build)
+        unreleased_ts = _lockfile_seed_build_completion_ts(unreleased_build)
+        # Prefer UNRELEASED on equal completion time (same tie-break as index-based max before).
+        chosen = unreleased_build if unreleased_ts >= success_ts else success_build
+
     if chosen.installed_rpms:
         return chosen
-    return next((c for c in candidates if c is not chosen and c.installed_rpms), chosen)
+    for candidate in (success_build, unreleased_build):
+        if candidate is not None and candidate is not chosen and candidate.installed_rpms:
+            return candidate
+    return chosen
 
 
 @lru_cache(maxsize=256)
