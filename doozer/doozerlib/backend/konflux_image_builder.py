@@ -381,7 +381,7 @@ class KonfluxImageBuilder:
                     if outcome is KonfluxBuildOutcome.UNRELEASED and metadata.should_trigger_base_image_release():
                         base_image_release_success = await self._trigger_base_image_release(metadata, nvr)
                         if base_image_release_success:
-                            logger.info(f"Base image release succeeded for {nvr}, updating with registry pullspec")
+                            logger.info(f"Base image release succeeded for {nvr}, updating build record")
                         else:
                             logger.error(f"Base image release failed for {nvr}, updating build record to FAILURE")
                         outcome = (
@@ -396,7 +396,6 @@ class KonfluxImageBuilder:
                             build_priority,
                             ec_status=ec_status,
                             ec_pipeline_url=ec_pipeline_url,
-                            released=base_image_release_success,
                         )
 
                 if outcome is not KonfluxBuildOutcome.SUCCESS:
@@ -908,7 +907,6 @@ class KonfluxImageBuilder:
         build_priority,
         ec_status=KonfluxECStatus.NOT_APPLICABLE,
         ec_pipeline_url='',
-        released=False,
     ) -> Optional[KonfluxBuildRecord]:
         logger = self._logger.getChild(f"[{metadata.distgit_key}]")
         if not metadata.runtime.konflux_db:
@@ -996,10 +994,7 @@ class KonfluxImageBuilder:
                     f"pipelinerun {pipelinerun_name}"
                 )
 
-            if released:
-                definitive_image_pullspec = util.rh_art_images_base_pullspec(nvr)
-            else:
-                definitive_image_pullspec = f"{image_pullspec.split(':')[0]}@{image_digest}"
+            definitive_image_pullspec = f"{image_pullspec.split(':')[0]}@{image_digest}"
 
             # use image_digest here to be precise, image_pullspec can collide in case of golang-builder images
             package_nvrs, source_rpms = await self.get_installed_packages(
