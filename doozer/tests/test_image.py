@@ -1191,6 +1191,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         rt.group = 'test-group'
         rt.build_system = 'konflux'
         rt.konflux_db = MagicMock()
+        rt.assembly = 'stream'
 
         metadata = image.ImageMetadata(rt, data_obj)
         metadata.logger = self.logger
@@ -1719,6 +1720,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         runtime = MagicMock()
         runtime.logger = logging.getLogger('test_runtime')
         runtime.variant = BuildVariant.OCP
+        runtime.assembly = 'stream'
 
         # Test base image - should trigger workflow
         base_image = Model({'name': 'test-base', 'base_only': True})
@@ -1732,6 +1734,14 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         golang_metadata = ImageMetadata(runtime, golang_data)
         self.assertTrue(golang_metadata.should_trigger_base_image_release())
 
+        # Non-stream assembly: base/golang do not use the base-image release path
+        test_assembly_runtime = MagicMock()
+        test_assembly_runtime.logger = logging.getLogger('test_runtime')
+        test_assembly_runtime.variant = BuildVariant.OCP
+        test_assembly_runtime.assembly = 'test'
+        self.assertFalse(ImageMetadata(test_assembly_runtime, base_data).should_trigger_base_image_release())
+        self.assertFalse(ImageMetadata(test_assembly_runtime, golang_data).should_trigger_base_image_release())
+
         # Test regular image - should NOT trigger workflow
         regular_image = Model({'name': 'test-regular'})
         regular_data = Model({'key': 'test-regular', 'data': regular_image, 'filename': 'test-regular.yaml'})
@@ -1742,6 +1752,7 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         okd_runtime = MagicMock()
         okd_runtime.logger = logging.getLogger('test_runtime')
         okd_runtime.variant = BuildVariant.OKD
+        okd_runtime.assembly = 'stream'
         okd_base_metadata = ImageMetadata(okd_runtime, base_data)
         self.assertFalse(okd_base_metadata.should_trigger_base_image_release())
 
