@@ -362,6 +362,11 @@ class KonfluxOcpPipeline:
         LOGGER.info(f"Using build priority: {self.build_priority}")
         cmd.extend(['--build-priority', self.build_priority])
 
+        # Skip EC verification for test assembly
+        if self.assembly == 'test':
+            LOGGER.info('Skipping EC verification for test assembly')
+            cmd.append('--skip-ec-verify')
+
         await exectools.cmd_assert_async(cmd)
 
         LOGGER.info("All builds completed successfully")
