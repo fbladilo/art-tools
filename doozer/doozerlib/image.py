@@ -1395,7 +1395,7 @@ class ImageMetadata(Metadata):
         Determines whether this image should trigger the base image release workflow.
 
         OKD builds never trigger the OCP registry.redhat.io base-image release path.
-        Only the stream assembly uses this path (Konflux UNRELEASED, Jenkins snapshot-to-release,
+        The test assembly does not use this path (Konflux UNRELEASED, Jenkins snapshot-to-release,
         registry.redhat.io parent pullspecs, lockfile seeding with unreleased builds).
 
         Returns:
@@ -1403,7 +1403,7 @@ class ImageMetadata(Metadata):
         """
         if self.runtime.variant is BuildVariant.OKD:
             return False
-        if self.runtime.assembly != "stream":
+        if self.runtime.assembly == "test":
             return False
         return self.is_base_image() or self.is_golang_builder()
 

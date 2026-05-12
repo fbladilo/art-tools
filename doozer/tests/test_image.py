@@ -1734,13 +1734,21 @@ class TestImageMetadataAsyncMethods(IsolatedAsyncioTestCase):
         golang_metadata = ImageMetadata(runtime, golang_data)
         self.assertTrue(golang_metadata.should_trigger_base_image_release())
 
-        # Non-stream assembly: base/golang do not use the base-image release path
+        # Test assembly: base/golang do not use the base-image release path
         test_assembly_runtime = MagicMock()
         test_assembly_runtime.logger = logging.getLogger('test_runtime')
         test_assembly_runtime.variant = BuildVariant.OCP
         test_assembly_runtime.assembly = 'test'
         self.assertFalse(ImageMetadata(test_assembly_runtime, base_data).should_trigger_base_image_release())
         self.assertFalse(ImageMetadata(test_assembly_runtime, golang_data).should_trigger_base_image_release())
+
+        # Named (non-test) assembly still uses the base-image release path
+        named_runtime = MagicMock()
+        named_runtime.logger = logging.getLogger('test_runtime')
+        named_runtime.variant = BuildVariant.OCP
+        named_runtime.assembly = '4.17.1'
+        self.assertTrue(ImageMetadata(named_runtime, base_data).should_trigger_base_image_release())
+        self.assertTrue(ImageMetadata(named_runtime, golang_data).should_trigger_base_image_release())
 
         # Test regular image - should NOT trigger workflow
         regular_image = Model({'name': 'test-regular'})
