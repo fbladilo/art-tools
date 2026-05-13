@@ -96,6 +96,7 @@ class KonfluxOcpPipeline:
         skip_rebase: bool = None,
         skip_bundle_build: bool = None,
         skip_build_sync_konflux: bool = False,
+        skip_ec_verify: bool = False,
         arches: Tuple[str, ...] = None,
         plr_template: str = None,
         lock_identifier: str = None,
@@ -115,6 +116,7 @@ class KonfluxOcpPipeline:
         self.skip_rebase = skip_rebase
         self.skip_bundle_build = skip_bundle_build
         self.skip_build_sync_konflux = skip_build_sync_konflux
+        self.skip_ec_verify = skip_ec_verify
         self.plr_template = plr_template
         self.lock_identifier = lock_identifier
         self.skip_plashets = skip_plashets
@@ -362,9 +364,9 @@ class KonfluxOcpPipeline:
         LOGGER.info(f"Using build priority: {self.build_priority}")
         cmd.extend(['--build-priority', self.build_priority])
 
-        # Skip EC verification for test assembly
-        if self.assembly == 'test':
-            LOGGER.info('Skipping EC verification for test assembly')
+        # Skip EC verification if explicitly requested
+        if self.skip_ec_verify:
+            LOGGER.info('Skipping EC verification as requested')
             cmd.append('--skip-ec-verify')
 
         await exectools.cmd_assert_async(cmd)
@@ -1025,6 +1027,9 @@ class KonfluxOcpPipeline:
 @click.option("--skip-bundle-build", is_flag=True, help="(For testing) Skip the bundle build step")
 @click.option("--skip-build-sync-konflux", is_flag=True, help="(For testing) Skip the build-sync-konflux step")
 @click.option(
+    "--skip-ec-verify", is_flag=True, default=False, help="Skip Enterprise Contract verification for built images"
+)
+@click.option(
     "--arch", "arches", metavar="TAG", multiple=True, help="(Optional) [MULTIPLE] Limit included arches to this list"
 )
 @click.option(
@@ -1075,6 +1080,7 @@ async def ocp4(
     skip_rebase: bool,
     skip_bundle_build: bool,
     skip_build_sync_konflux: bool,
+    skip_ec_verify: bool,
     arches: Tuple[str, ...],
     plr_template: str,
     skip_plashets,
@@ -1101,6 +1107,7 @@ async def ocp4(
         skip_rebase=skip_rebase,
         skip_bundle_build=skip_bundle_build,
         skip_build_sync_konflux=skip_build_sync_konflux,
+        skip_ec_verify=skip_ec_verify,
         arches=arches,
         plr_template=plr_template,
         lock_identifier=lock_identifier,
