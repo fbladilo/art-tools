@@ -1348,7 +1348,7 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         rebaser.variant = BuildVariant.OCP
         rebaser.image_repo = "quay.io/fake"
         rebaser.uuid_tag = "v4.18-abc"
-        rebaser.group = "openshift-4.18"
+        rebaser.derived_group = "openshift-4.18"
         rebaser._rebased_nvr_info["golang-builder"] = ("v1.21", "1.el9")
 
         resolved, _embargo = await rebaser._resolve_member_parent("golang-builder", "ignored")
@@ -1380,7 +1380,7 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         rebaser.variant = BuildVariant.OCP
         rebaser.image_repo = "quay.io/fake"
         rebaser.uuid_tag = "v4.18-tag"
-        rebaser.group = "openshift-4.18"
+        rebaser.derived_group = "openshift-4.18"
         rebaser._registry_pullspec_exists = AsyncMock(return_value=True)
 
         resolved, emb = await rebaser._resolve_member_parent("golang-builder", "orig")
@@ -1412,7 +1412,7 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         rebaser.variant = BuildVariant.OCP
         rebaser.image_repo = "quay.io/fake"
         rebaser.uuid_tag = "v4.18-tag"
-        rebaser.group = "openshift-4.18"
+        rebaser.derived_group = "openshift-4.18"
         rebaser._registry_pullspec_exists = AsyncMock(return_value=False)
 
         resolved, emb = await rebaser._resolve_member_parent("golang-builder", "orig")
@@ -1436,7 +1436,7 @@ class TestRebaserResolveMemberParentRegistryRedhat(IsolatedAsyncioTestCase):
         rebaser.variant = BuildVariant.OCP
         rebaser.image_repo = "quay.io/fake"
         rebaser.uuid_tag = "v4.18-uuid"
-        rebaser.group = "openshift-4.18"
+        rebaser.derived_group = "openshift-4.18"
 
         resolved, _ = await rebaser._resolve_member_parent("ose-cli", "ignored")
         self.assertEqual(resolved, "quay.io/fake:ose-cli-v4.18-uuid")

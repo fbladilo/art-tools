@@ -99,9 +99,9 @@ class KonfluxRebaser:
             self.konflux_db.bind(KonfluxBuildRecord)
         if self.variant is BuildVariant.OKD:
             major, minor = runtime.get_major_minor_fields()
-            self.group = f'okd-{major}.{minor}'
+            self.derived_group = f'okd-{major}.{minor}'
         else:
-            self.group = runtime.group
+            self.derived_group = runtime.group
 
     @staticmethod
     def construct_dest_branch(group: str, assembly_name: Optional[str], distgit_key: str) -> str:
@@ -165,14 +165,8 @@ class KonfluxRebaser:
                     f"Image {metadata.qualified_key} doesn't have upstream source. This is no longer supported."
                 )
 
-            if self.variant is BuildVariant.OKD:
-                major, minor = self._runtime.get_major_minor_fields()
-                group = f'okd-{major}.{minor}'
-            else:
-                group = self._runtime.group
-
             dest_branch = self.construct_dest_branch(
-                group=group,
+                group=self.derived_group,
                 assembly_name=self._runtime.assembly,
                 distgit_key=metadata.distgit_key,
             )
@@ -543,7 +537,7 @@ class KonfluxRebaser:
                 build = await parent_metadata.get_latest_build(
                     el_target=self._get_el_target_string(parent_metadata.branch_el_target()),
                     engine=Engine.KONFLUX,
-                    group=self.group,
+                    group=self.derived_group,
                     exclude_large_columns=True,
                 )
 
