@@ -59,6 +59,7 @@ class ConfigScanSources:
         rebase_priv: bool = False,
         dry_run: bool = False,
         variant: str = 'ocp',
+        skip_rpms: bool = False,
     ):
         if runtime.konflux_db is None:
             raise DoozerFatalError('Cannot run scan-sources without a valid Konflux DB connection')
@@ -74,13 +75,15 @@ class ConfigScanSources:
         self.rebase_priv = rebase_priv
         self.dry_run = dry_run
         self.variant = BuildVariant(variant.lower())
+        self.skip_rpms = skip_rpms
 
         # Ensure runtime.variant matches (should already be set by the command function)
         # This is kept for backward compatibility in case ConfigScanSources is instantiated directly
         self.runtime.variant = self.variant
 
         # Only load RPM metadata for OCP variant (OKD doesn't check RPM changes)
-        if self.variant != BuildVariant.OKD:
+        # Also skip RPMs if --skip-rpms flag is set
+        if self.variant != BuildVariant.OKD and not self.skip_rpms:
             self.all_rpm_metas = set(runtime.rpm_metas())
         else:
             self.all_rpm_metas = set()
@@ -235,13 +238,15 @@ class ConfigScanSources:
             else:
                 self.rebase_into_priv()
 
-        if self.variant != BuildVariant.OKD:
+        # Skip RPM-related operations for OKD variant or when --skip-rpms is set
+        if self.variant != BuildVariant.OKD and not self.skip_rpms:
             # Gather latest builds for ART-managed RPMs
             await self.find_latest_rpms_builds()
             # Find RPMs built by ART that need to be rebuilt
             await self.check_changing_rpms()
-            # Get current task bundle SHAs from GitHub
-            self.current_task_bundles = await self.get_current_task_bundle_shas()
+
+        # Get current task bundle SHAs from GitHub (needed for image task bundle checks)
+        self.current_task_bundles = await self.get_current_task_bundle_shas()
 
         # Build an image dependency tree to scan across levels of inheritance. This should save us some time,
         # as when an image is found in need for a rebuild, we can also mark its children or operators without checking
@@ -529,7 +534,7 @@ class ConfigScanSources:
             self.latest_rpm_build_records_map[rpm_name][el_target] = build_record
 
         tasks = []
-        for rpm in self.runtime.rpm_metas():
+        for rpm in self.all_rpm_metas:
             tasks.extend([_find_target_build(rpm, f'el{target}') for target in rpm.determine_rhel_targets()])
         await asyncio.gather(*tasks)
 
@@ -1512,7 +1517,7 @@ class ConfigScanSources:
                 return
 
         tasks = []
-        for rpm_meta in self.runtime.rpm_metas():
+        for rpm_meta in self.all_rpm_metas:
             if rpm_meta.config.targets:
                 tasks.extend(
                     [check_rpm_target(rpm_meta, f'el{target}') for target in rpm_meta.determine_rhel_targets()]
@@ -1828,9 +1833,12 @@ class ConfigScanSources:
 @click.option("--yaml", "as_yaml", default=False, is_flag=True, help='Print results in a yaml block')
 @click.option("--rebase-priv", default=False, is_flag=True, help='Try to reconcile public upstream into openshift-priv')
 @click.option('--dry-run', default=False, is_flag=True, help='Do not actually perform reconciliation, just log it')
+@click.option(
+    '--skip-rpms', default=False, is_flag=True, help='Skip RPM checks and only scan images (useful for local testing)'
+)
 @click_coroutine
 @pass_runtime
-async def config_scan_source_changes_konflux(runtime: Runtime, ci_kubeconfig, as_yaml, rebase_priv, dry_run):
+async def config_scan_source_changes_konflux(runtime: Runtime, ci_kubeconfig, as_yaml, rebase_priv, dry_run, skip_rpms):
     """
     Determine if any rpms / images need to be rebuilt.
 
@@ -1856,7 +1864,12 @@ async def config_scan_source_changes_konflux(runtime: Runtime, ci_kubeconfig, as
 
     # runtime.variant is already set by the global --variant option (defaults to BuildVariant.OCP)
     # OKD configuration is automatically merged in get_group_config() when variant=okd
-    runtime.initialize(mode='both' if runtime.variant != BuildVariant.OKD else 'images', clone_distgits=False)
+    # Determine mode: skip RPMs if --skip-rpms flag is set, OKD variant, or if variant is not OCP
+    if skip_rpms or runtime.variant == BuildVariant.OKD:
+        mode = 'images'
+    else:
+        mode = 'both'
+    runtime.initialize(mode=mode, clone_distgits=False)
 
     async with aiohttp.ClientSession() as session:
         await ConfigScanSources(
@@ -1866,5 +1879,6 @@ async def config_scan_source_changes_konflux(runtime: Runtime, ci_kubeconfig, as
             rebase_priv=rebase_priv,
             dry_run=dry_run,
             variant=runtime.variant.value,
+            skip_rpms=skip_rpms,
             session=session,
         ).run()
