@@ -343,10 +343,11 @@ class KonfluxImageBuilder:
                         ec_policy=ec_policy,
                         logger=logger,
                     )
+                    # Always save EC pipeline URL for tracking, regardless of pass/fail
+                    ec_pipeline_url = ec_result.ec_pipeline_url
+                    record["ec_pipeline_url"] = ec_pipeline_url
                     if ec_result.ec_failed:
-                        ec_pipeline_url = ec_result.ec_pipeline_url
                         outcome = KonfluxBuildOutcome.ITS_ERROR
-                        record["ec_pipeline_url"] = ec_pipeline_url
 
                 elif outcome is KonfluxBuildOutcome.SUCCESS:
                     if metadata.runtime.variant is BuildVariant.OKD:
