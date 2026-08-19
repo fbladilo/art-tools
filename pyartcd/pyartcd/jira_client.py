@@ -48,7 +48,7 @@ class JIRAClient:
             issue_key: The JIRA issue key (e.g. "OADP-1234")
             link_object: Dict with "title" and "url" keys
         """
-        self._client.add_remote_link(issue_key, {"object": link_object})
+        self._client.add_remote_link(issue_key, link_object)
 
     def assign_to_me(self, key):
         self._client.assign_issue(key, 'openshift-art-jira-bot')
